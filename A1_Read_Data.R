@@ -117,6 +117,9 @@ SampleInfo$SampleName <- paste0(
   SampleInfo$Sample_ID
 )
 
+SampleInfo$Symptomatic <- "Symptomatic"
+SampleInfo$Symptomatic[SampleInfo$Case %in% c("Carrier", "control")] <- "NonSymptomatic"
+
 
 
 
@@ -227,3 +230,4 @@ qsave(
   "../Data/Samples/SampleInfo.qrds", 
   nthr = nthr
 )
+
