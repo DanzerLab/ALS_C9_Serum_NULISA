@@ -2,7 +2,7 @@
 ###                                                                          ###
 ### *A1_Read_Data.R                                                          ###
 ### *v1.0                                                                    ###
-### *VG19.09.24                                                              ###
+### *VG12.12.24                                                              ###
 ### *Project: NULISA_ALS_Serum                                               ###
 ###                                                                          ###
 ### *Description: Read-in and formatting of the NULISA data                  ###
@@ -15,7 +15,8 @@
   ### 0.0 Load libraries ------------------------------------------------------- 
 
 library(qs)  
-library(tidyverse)
+library(tidyverse) 
+library(lubridate)
 library(data.table)
 library(NULISAseqR)
 
@@ -45,6 +46,7 @@ NPQ <- readxl::read_xlsx(
     )
   )[1]
 )
+
 NPQ$Target <- str_replace_all(
   NPQ$Target, 
   pattern="Î²", 
@@ -74,31 +76,8 @@ colnames(P000572_Target_List) <- str_replace_all(
 
 
 
-    ## 1.2 Target Detectability Statistics -------------------------------------
 
-Targ_Det <- readxl::read_xlsx(
-  path = paste0(
-    "../Data/Input/", 
-    "Alamar_Input_data.xlsx"
-  ), 
-  sheet = readxl::excel_sheets(
-    paste0(
-      "../Data/Input/", 
-      "Alamar_Input_data.xlsx"
-    )
-  )[2]
-)
-colnames(Targ_Det) <- c("Target", "Target_Detectability")
-
-Targ_Det$Target <- str_replace_all(
-  Targ_Det$Target, 
-  pattern="Î²", 
-  replacement="β"
-)
-
-
-
-    ## 1.3 Sample Info ---------------------------------------------------------
+    ## 1.2 Sample Info ---------------------------------------------------------
 
 SampleInfo <- fread(
   paste0(
@@ -176,9 +155,6 @@ unique(P000572_Target_List$Gene)[
 
 
 
-
-
-
   ### 3.0 Format data ----------------------------------------------------------
 
 NPQ_Wide <- reshape(
@@ -203,6 +179,30 @@ colnames(NPQ_Wide) <- apply(
 )
 
 
+sum(is.na(SampleInfo$Collection_date) | SampleInfo$Collection_date=="") == 
+  sum(is.na(dmy(SampleInfo$Collection_date))) 
+
+SampleInfo <- SampleInfo %>% 
+  group_by(Case_ID) %>% 
+  mutate(LatestTimepoint = dmy(Collection_date) == max(dmy(Collection_date), na.rm = TRUE)) %>% 
+  arrange(as.numeric(Sample_ID)) %>% 
+  ungroup() %>% 
+  mutate(LatestTimepoint = replace(LatestTimepoint, is.na(LatestTimepoint), TRUE))
+
+
+SampleInfo_AllSamples <- SampleInfo 
+NPQ_Wide_AllSamples <- NPQ_Wide
+
+SampleInfo <- SampleInfo %>% 
+  filter(Include & LatestTimepoint) %>% 
+  select(- c(Include, LatestTimepoint)) %>% 
+  column_to_rownames("SampleName") %>% 
+  mutate(SampleName = rownames(.))
+
+NPQ_Wide <- NPQ_Wide %>% 
+  select(all_of(rownames(SampleInfo)))
+
+
 
 
   ### 4.0 Export data ----------------------------------------------------------
@@ -214,14 +214,21 @@ qsave(
 )
 
 qsave(
+  NPQ_Wide_AllSamples, 
+  "../Data/NPQ/NPQ_Wide_AllSamples.qrds", 
+  nthr = nthr
+)
+
+qsave(
   NPQ_Wide, 
   "../Data/NPQ/NPQ_Wide.qrds", 
   nthr = nthr
 )
 
+
 qsave(
-  Targ_Det, 
-  "../Data/NPQ/Targ_Det.qrds", 
+  SampleInfo_AllSamples, 
+  "../Data/Samples/SampleInfo_AllSamples.qrds", 
   nthr = nthr
 )
 
@@ -230,4 +237,3 @@ qsave(
   "../Data/Samples/SampleInfo.qrds", 
   nthr = nthr
 )
-
